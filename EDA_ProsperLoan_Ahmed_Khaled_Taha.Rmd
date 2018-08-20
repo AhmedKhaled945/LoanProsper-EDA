@@ -1,0 +1,535 @@
+---
+title: "Prosper Loan Data"
+author: "Ahmed Khaled Taha"
+date: "August 18, 2018"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+#The following piece of code is to set the figure properties in the knitted file
+knitr::opts_chunk$set(fig.width=8,fig.height=7,fig.path='Figs/',
+                      fig.align='center',tidy=TRUE,
+                      echo=FALSE,warning=FALSE,message=FALSE)
+#Loading our libraries
+library(knitr)
+library(gridExtra)
+library(dplyr)
+library(scales)
+library(RColorBrewer)
+library(MASS)
+library(memisc)
+library(GGally)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+library(zoo)
+```
+##Here We will show the dataset structure
+```{r echo=FALSE, Load_the_Data}
+# Load the Data
+pf <- read.csv('prosperLoanData.csv')
+#Show the Data structure
+str(pf)
+```
+##Dataset's Summary
+
+```{r,echo=FALSE}
+#Show summary of data
+summary(pf)
+```
+
+
+# Univariate Plots Section
+
+First we will clean our data, make some new variables that will be essential for exploration.
+
+One of the most related variables to prosper rating is CreditScore, so we will form CreditScore Variable by averaging CreditScoreRangeLower and CreditScoreRangeUpper
+
+Also, we will change all dates columns into Date format
+
+We will change the format of LoanOriginationQuarter to begin with the year, to be suitable for our visualizations
+
+We will form a CreditGrade general variable using both CreditGrade (Pre 2009 Loans) & ProsperRating..Alpha. (Post 2009 Loans)
+
+At last, we will extract year, month, day variables from dates to make real time plots
+
+```{r echo=FALSE, Univariate_Plots}
+#Averaging the CreditScore lower and higher range to get CreditScore
+pf$CreditScore = with(pf,(CreditScoreRangeLower+CreditScoreRangeUpper)/2)
+#Removing the lower and upper range variables to conserve memory
+pf <- subset(pf , select= -c(CreditScoreRangeLower,CreditScoreRangeUpper))
+
+#Chaning the Date variables into date format
+pf$DateCreditPulled <- ymd_hms(pf$DateCreditPulled)
+pf$ClosedDate <- ymd_hms(pf$ClosedDate)
+pf$ListingCreationDate <- ymd_hms(pf$ListingCreationDate)
+pf$LoanOriginationDate <- ymd_hms(pf$LoanOriginationDate)
+
+#Forming a yearqtr class variable from the string variable to get the year first
+pf$LoanOriginationQuarter <- as.yearqtr(pf$LoanOriginationQuarter,format ="Q%q %Y")
+
+#Merging both variables ProsperRating..Alpha. and CreditGrade to get one variable describing Risk level all of the time
+pf$TotCreditGrade <- ifelse(!is.na(pf$ProsperRating..numeric.),as.character(pf$ProsperRating..Alpha.),as.character(pf$CreditGrade))
+
+#Setting the level of Risklevels as a factor variables and order their levels
+pf$TotCreditGrade <- factor(pf$TotCreditGrade,levels = c("AA","A","B","C","D","E","HR"),order = TRUE)
+
+#Extracting Year, month day from the date variables
+pf$LoanOriginationYear = as.numeric(format(pf$LoanOriginationDate, "%Y"))
+pf$ClosedDateYear = as.numeric(format(pf$ClosedDate, "%Y"))
+pf$ListingCreationYear = as.numeric(format(pf$ListingCreationDate, "%Y"))
+pf$LoanOriginationMonth = as.numeric(format(pf$LoanOriginationDate, "%m"))
+pf$ClosedDateMonth = as.numeric(format(pf$ClosedDate, "%m"))
+pf$ListingCreationMonth = as.numeric(format(pf$ListingCreationDate, "%m"))
+pf$LoanOriginationDay = as.numeric(format(pf$LoanOriginationDate, "%d"))
+pf$ClosedDateDay = as.numeric(format(pf$ClosedDate, "%d"))
+pf$ListingCreationDay = as.numeric(format(pf$ListingCreationDate, "%d"))
+  
+```
+
+**Plots**: Now, let's do some plots after running summary of our data.
+
+First Variable we will discuss is LoanOriginal Amount
+
+```{r echo= FALSE,warning=FALSE,message=FALSE}
+#Plotting histogram of LoanOriginalAmount with setting the x-axis to 35000 because there is no values beyond this value.
+ggplot(aes(LoanOriginalAmount),data = pf)+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(0,35000,5000))+
+  ggtitle("LoanOriginalAmount Histogram")
+```
+
+As we see here, most Loans were below 15000\$, Also there is a spike at each 5000\$ multiple.
+
+Now we will study the listing Date histograms
+
+```{r echo = FALSE , message = FALSE, warning = FALSE}
+#Making 3 plots of Listing Creation Year-Month-Day, and then plot them using grid library
+p1 <- ggplot(aes(ListingCreationYear),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(2005,2015,1))+
+  ggtitle("ListingDate Histograms")
+
+p2 <- ggplot(aes(ListingCreationMonth),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(1,12,1))
+
+p3 <- ggplot(aes(ListingCreationDay),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(1,31,1))
+
+grid.arrange(p1,p2,p3,heights = c(5,5,5))
+```
+
+So as we see, the highest number of loans were done at 2013, followed by 2012, and the lowest are on 2009 , which make sense due to the financial Crisis, Also the highest number of loans were done on January and the least is on December, And for the days, The highest is at the middle of the month and the lowest at Day 31.
+
+We will do the same for the Origination Date
+
+```{r echo = FALSE,message = FALSE, warning = FALSE}
+#The same Process used on ListingCreation
+p1 <- ggplot(aes(LoanOriginationYear),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(2005,2015,1))+
+  ggtitle("OriginationDates Histograms")
+
+p2 <- ggplot(aes(LoanOriginationMonth),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(1,12,1))
+
+p3 <- ggplot(aes(LoanOriginationDay),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(1,31,1))
+
+grid.arrange(p1,p2,p3,heights = c(5,5,5))
+```
+
+The distribution is nearly the same as listing dates, with a difference in the days distribution as the highest after the middle of the month is day number 30
+
+Now we will do the same for ClosingDates
+
+```{r echo = FALSE,warning = FALSE, message = FALSE}
+#The same Process used on ListingCreation
+p1 <- ggplot(aes(ClosedDateYear),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(2005,2015,1))+
+  ggtitle("ClosedDates Histograms")
+
+p2 <- ggplot(aes(ClosedDateMonth),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(1,12,1))
+
+p3 <- ggplot(aes(ClosedDateDay),data = pf )+
+  geom_histogram(color= "Black",fill = "blue")+
+  scale_x_continuous(breaks = seq(1,31,1))
+
+grid.arrange(p1,p2,p3,heights = c(5,5,5))
+```
+
+More loans are closed in 2013, Due to the fact that more loans were originated in it, also more loans are closed in the middle of the month, which makes sense because most of the loans originated on it.
+
+Now let's study the borrowers
+
+```{r echo = FALSE,message = FALSE, warning = FALSE}
+#Ordering the histogram bins to be in descending order according to count
+pf <- within(pf,Occupation <- factor(Occupation, 
+                                      levels=names(sort(table(Occupation), 
+                                                        decreasing=TRUE))))
+#Plotting the histogram of occupation that shows the highest bins first, adjusting text labels on x-axis to be vertical
+ggplot(aes(Occupation),data = pf)+
+  geom_histogram(stat="count", color= "Black", fill = "Blue")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle("Histogram of Loan Count of each Occupation type")
+
+```
+
+The highest loans are done by occupation type Other, followed by Professionals
+
+
+Let's study the state where the Loans are originated
+
+
+```{r echo = FALSE,warning = FALSE, message = FALSE}
+#Doing the same ordering thing but for States
+pf <- within(pf,BorrowerState <- factor(BorrowerState,levels=names(sort(table(BorrowerState),decreasing=TRUE))))
+
+#Plotting the histogram with higher bins first, adjusting text labels on x-axis to be vertical
+ggplot(aes(BorrowerState),data = pf)+
+  geom_histogram(stat="count", color= "Black", fill = "Blue")+
+  theme(axis.text.x = element_text(angle = 90))+
+  ggtitle("Histogram of Loan Count of each State")
+
+```
+
+
+The most Borrowers are from California, followed by Texas
+
+
+Now, we will study the income range
+
+```{r echo = FALSE,warning= FALSE,message=FALSE}
+#Ploting the histogram of Income Range, adjusting text labels on x-axis to be vertical
+ggplot(aes(IncomeRange),data = pf)+
+  geom_histogram(stat="count", color= "Black", fill = "Red")+
+  theme(axis.text.x = element_text(angle = 90))+
+  ggtitle("Histogram of IncomeRange of each borrower")
+```
+
+The plot is nearly normal distribution
+
+Now, for the CreditScore
+
+```{r echo = FALSE,warning=FALSE,message=FALSE}
+#Ploting a histogram of CreditScore, adjusting text labels on x-axis to be vertical
+ggplot(aes(CreditScore),data = pf)+
+  geom_histogram(stat="count", color= "Black", fill = "Red")+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_x_continuous(limits = c(400,900))+
+  ggtitle("Histogram of CreditScore of borrowers")
+
+
+```
+
+As we see, this plot is also a nearly normal distribution approximately center at CreditScore = 700
+
+
+Now we will plot the Debt-To-Income Ratio
+
+```{r echo= FALSE,warning=FALSE,message=FALSE}
+#Ploting DebtToIncomeRatio histogram
+ggplot(aes(DebtToIncomeRatio),data = pf)+
+  geom_histogram(stat="count", color= "Black", fill = "Red",binwidth=0.02)+
+  scale_x_continuous(limits = c(0,1.5),breaks = seq(0,1.5,0.1))+
+  ggtitle("Histogram of DebtToIncomeRatio of borrowers")
+```
+
+The bulk of data is below 0.7 with the median being 0.2
+
+Let's study the delinquencies now
+
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+#Ploting Delinquencies histogram
+ggplot(aes(CurrentDelinquencies),data = pf)+
+  geom_histogram(stat="count", color= "Black", fill = "Red")+
+  ggtitle("Histogram of Delinquencies number")
+```
+
+This is a very good indication, as the most of Borrowers have 0 delinquencies
+
+Now, we will plot a time series plot describing the relation between LoanStatus and The year quarter
+
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+#Adjusting the type of customers to good or bad based on there loan status
+#If current or completed, or finalPayment in progress, it is considered good, else is considered bad
+pf$LoanStatusCategories = ifelse((pf$LoanStatus == 'Current' | pf$LoanStatus == 'Completed'| pf$LoanStatus == 'FinalPaymentInProgress'),'good', 'bad')
+
+#Ploting a histogram of real time evolution of LoanOrigination Quarter colored by the customer status
+ggplot(aes(factor(LoanOriginationQuarter),fill=LoanStatusCategories),data=pf)+
+  geom_histogram(stat="count",color="Black")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle("Histogram of Loan Count in each quarter of year vs. type of loan")
+
+#Pie chart to show the ratio between bad and good customers
+pie(table(pf$LoanStatusCategories),radius = 1,main = "Pie Chart of Good-Bad Borrowers Proportions")
+
+
+```
+
+The first plot proves that the company is growing, since number of loans increasing by the time, also the second plot refers that Good Customers are far more than bad Customers
+
+# Univariate Analysis
+
+
+### What is the structure of your dataset?
+
+113937 Observations of 81 Variables
+
+
+### What is/are the main feature(s) of interest in your dataset?
+
+ProsperRatings,ProsperScore, AmountDelinquint, Total inquiries, DebtToIncomeRatio, CreditUtilization, CurrentDelinquincies, Dates of Closing,Origination And Listing.
+
+### What other features in the dataset do you think will help support your \
+investigation into your feature(s) of interest?
+
+all CreditScore, Also the Term, Employment, Occupation, EmploymentDuration, IsBorrowerHomeOwner, IsInGroup, TradesNeverDelinquent..percentage.
+
+### Did you create any new variables from existing variables in the dataset?
+
+Yes, i created a new Credit score variable by averaging both upper and lower range, then i created a modified LoanOriginationQuarter to convert it to a date to make it's plot well ordered, also i split up all dates into Years,Months,Days, Also i added CreditGrade and ProsperRating..Alpha to one variable as they reflect the same thing but on two different periods
+
+### Of the features you investigated, were there any unusual distributions? \
+Did you perform any operations on the data to tidy, adjust, or change the form \
+of the data? If so, why did you do this?
+
+No, all the visualization nearly make sense, i only plotted some histograms, and for the distributions, all seems fine, even the skewed distribution make sense.
+
+# Bivariate Plots Section
+
+Now, we will see relations between two features, we will start with the relation between TotalCreditGrade & CreditScore, Since one of them is categorical, we will use box plots 
+
+```{r echo=FALSE,message=FALSE,warning=FALSE, Bivariate_Plots}
+#Ploting BoxPlot of Risk level on x-axis , CreditScore on y-axis, with outlier in blue.
+ggplot(aes(x=TotCreditGrade,y=CreditScore),data=subset(pf,!is.na(TotCreditGrade)))+
+  geom_boxplot(color = "black",outlier.colour = "blue")+
+  scale_y_continuous(limits=c(375,1050))+
+  ggtitle("Boxplot of Risk Level vs. CreditScore")
+```
+
+As we see, as we go higher in risk (To the right), The CreditScore is going down, and this makes sense because more CreditScore Means more propability for a borrower to complete his loan.
+
+Now, we will do the same but for the BorrowerAPR vs TotCreditGrade
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+#Ploting BoxPlot of Risk level on x-axis , APR on y-axis, with outlier in blue.
+ggplot(aes(x=TotCreditGrade,y=BorrowerAPR),data=subset(pf,!is.na(TotCreditGrade)))+
+  geom_boxplot(color = "black",outlier.colour = "blue")+
+  ggtitle("BoxPlot of Risk Level vs. BorrowerAPR")
+```
+
+Again, the visualization is making alot of sense, as we step up in the ladder of risk, from low to high, we increase the Borrower Annual Percentage Rate
+
+
+Now, we will study the Loan Categories (Bad,Good) vs quarters with line plots
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+#Line plot of Quarter on x-axis and Count of loans on y-axis, splitted by the Customer Category (bad,good)
+ggplot(aes(x=LoanOriginationQuarter),data=pf)+
+  facet_wrap(~LoanStatusCategories)+
+  geom_line(stat = "count" , color = "red")+
+  scale_x_continuous(breaks = seq(2005,2014,1))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("LoanOriginationQuarter")+
+  ggtitle("Line plot of Loan counts over time (Bad vs. Good)")
+```
+
+As we see, good customers increased alot from 2013 to 2014, also as we referred before, 2009 has the lowest bad and good customers rates as there wes a financial Crisis.
+
+
+Now, let's see the relation between TotCreditGrade and AmountDelinquent
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+#Box plot of Risk level vs Amount of dolars delinquent, taking only 95% of AmountDelinquent variable to remove some outliers
+ggplot(aes(x=TotCreditGrade,y = AmountDelinquent),data=subset(pf,!is.na(TotCreditGrade)))+
+  geom_boxplot(color = "Black",outlier.color = "Blue")+
+  ggtitle("BoxPlot of Risk Level vs. Amount Delinquent")+
+  scale_y_continuous(limits = c(0,quantile(pf$AmountDelinquent,0.95,na.rm=TRUE)))
+```
+
+This result here seems weird as a visualization, but it clearly support our exploration above, that said most of People has no delinquencies, here, the median of Amount Delinquent is nearly = 0 for all risk levels, which means the bulk of data has no delinquencies.
+
+
+Then we will study the relation between Loan Status and the Term Length, Because i have an initial thought that LoanStatus will be easier to complete if the Term is higher
+
+```{r echo = FALSE, warning=FALSE,message=FALSE}
+#Splitting the pf Loan status into Completed,Defaulted,or others to seek the relation between term and loan status
+
+#Using dplyr to perform some operations on the dataframe 
+pf.TermStats <- pf %>%
+    group_by(Term, LoanStatus) %>%
+    summarise(n = n())
+levels(pf.TermStats$LoanStatus) <-
+    c(levels(pf.TermStats$LoanStatus), "Other")
+pf.TermStats$LoanStatus[!(pf.TermStats$LoanStatus %in%
+                                     c("Completed", "Defaulted"))] <- "Other"
+#Performing the calculations of Frequency that we need to plot by dividing the total of each type by the total of the loans
+pf.TermStats <- pf.TermStats %>%
+    group_by(Term, LoanStatus) %>%
+    summarise(p = n(), total = sum(n)) %>%
+    mutate(freq = round(total / sum(total) * 100, 2))
+
+ggplot(aes(x = Term / 12, y = freq, fill = LoanStatus),
+       data = pf.TermStats) +
+    geom_bar(stat = 'identity',color="Black") + 
+    scale_x_continuous(breaks = c(1, 3, 5)) +
+    xlab('Loan term in years') +
+    ggtitle("LoanStatus: Completed vs Defaulted") +
+    ylab("% of Borrowers")
+
+```
+
+That means that according to this plot, my initial thought was wrong, as there is no trend in Defaulted LoanStatus. So decision cannot be made until we explore the dataset further
+
+
+# Bivariate Analysis
+
+So now, we know that ProsperRating is related strongly with BorrowerAPR, CreditScore
+
+Also, we know that good customers is growing in the last year and bad customers are decreasing.
+
+And we have another proof that Most of our customers has no delinquencies
+
+
+# Multivariate Plots Section
+
+Now, let's see the relation between Risk levels, APR, and Debt-To-Income all together
+
+```{r echo=FALSE,warning=FALSE,message = FALSE, Multivariate_Plots}
+#Scatter plot of multicolor, studying the relation between DebtToIncome ratio, APR , and Risk level
+ggplot(aes(DebtToIncomeRatio,BorrowerAPR,color = TotCreditGrade),data=subset(pf,!is.na(TotCreditGrade)))+
+  geom_point()+
+  scale_x_continuous(limits = c(0,1.75),breaks = seq(0,1.75,0.25))+
+  ggtitle("ScatterPlot of APR vs. DebtToIncomeRatio, colored by Risk Levels")
+
+```
+
+The plot is uniform , as the APR increases, the risk increases, and the debt to income ratio range increases, but that holds except for The Risk level (A), which come before Risk level (AA) in the APR, which seems strange.
+
+
+Now, we will do the same but with the lender yield vs Loan Original ammount, for each customer category (bad,good), and color it with the Risk level
+
+```{r echo=FALSE,warning=FALSE,message = FALSE}
+#Scatterplot of Loan Amount vs lender yield colored by Risk level, splitted by Loan status (bad,good)
+ggplot(aes(LoanOriginalAmount,LenderYield,color = TotCreditGrade),data=subset(pf,!is.na(TotCreditGrade)))+
+  facet_wrap(~LoanStatusCategories)+
+  geom_point()+
+  ggtitle("ScatterPlots of LoanAmount vs LenderYield colored by Risk Level")
+
+```
+
+In this plot we see that for good loans, LoanOriginalAmount has bigger range eventually, also as we increase the lender yield, The risk increases, Also we can observe vertical strict lines at each multiple of 5000\$, and this make sense as most loans are given in those multiples.
+
+# Multivariate Analysis
+
+We explored the relation between APR,Risk Level,DebtToIncomeRatio, found there was a correlation between the 3 features, with exception in (A) Level which come before (AA) level in the plot.
+
+Also we explored the LoanAmount, LenderYield & Risk Level, we found the same correlation between the 3 features, and the effect of them on RiskLevels.
+
+### Were there any interesting or surprising interactions between features?
+
+In the first plot, Level (A) were lower in APR and DebtToIncomeRatio Range than level (AA), which is kind of surprising.
+
+
+------
+
+# Final Plots and Summary
+
+
+### Plot One
+```{r echo=FALSE,warning=FALSE,message=FALSE, Plot_One}
+ggplot(aes(factor(LoanOriginationQuarter),fill=LoanStatusCategories),data=pf)+
+  geom_histogram(stat="count",color="Black")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle("Histogram of Loan Count in each quarter of year vs. type of loan")+
+  xlab("Loan Origination Quarted (Date)")+
+  ylab("Count")
+```
+
+### Description One
+
+This is nearly the most informative plot of all the plots i made, it tells us alot about the company evolution, the efficiency of Loans, and the difference between before the Crisis and after the Crisis,
+
+First, in the period before 2009, we have The loans nearly split to 40% bad, 60% good, which is not very good, this is a high rate of failure in the loan system, which can make it so hard for lenders to invest in big loans
+
+Second, in the period after 2009, we have this changed, the majority of the loans are of a good status, also the number of loans are much higher, which refers to a Company Evolution, and Performance efficiency increasing.
+
+### Plot Two
+```{r echo=FALSE,warning=FALSE,message=FALSE, Plot_Two}
+ggplot(aes(x=TotCreditGrade,y=BorrowerAPR),data=subset(pf,!is.na(TotCreditGrade)))+
+  geom_boxplot(color = "black",outlier.colour = "blue")+
+  ggtitle("BoxPlot of Risk Level vs. BorrowerAPR")+
+  xlab("Risk Level")+
+  ylab("BorrowerAPR (%)")
+```
+
+### Description Two
+
+This is an easy to intrepret plot, yet it shows a clear relation between Risk levels and borrowers APR, in which , in some cases can be used to build a predictive model to predict the TotCreditGrade, Along with some other features like (DebtToIncomeRatio, AmountDelinquent, TotalInquiries, CreditLines, etc...)
+
+This predictive model is not the regular linear regression, it should be a multilevel classifier, as we are prediciting a multi-level categorical variable. (Needs a machine learning base)
+
+### Plot Three
+```{r echo=FALSE,warning=FALSE,message=FALSE, Plot_Three}
+ggplot(aes(LoanOriginalAmount,LenderYield,color = TotCreditGrade),data=subset(pf,!is.na(TotCreditGrade)))+
+  facet_wrap(~LoanStatusCategories)+
+  geom_point()+
+  scale_x_continuous(breaks = seq(0,40000,5000))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle("ScatterPlots of LoanAmount vs LenderYield colored by Risk Level")+
+  xlab("Original Loan Amount ($)") +
+  ylab("Lender Yield (%)")
+```
+
+### Description Three
+
+And here, the final plot i will put in this section, that has many information inside it, the relation between LoanAmount and Lenderyield Studied with RiskLevel.
+
+First, we observe that for the bad customers, a realy realy few number of loans gone higher than 25000\$, so the bulk of the high loans (>25000\$) are good loans.
+
+Second, we observe that as the LenderYield increases, the risk level increases, which makes alot of sense.
+
+------
+
+# Reflection
+
+This dataset was very challenging for me, the hardest among the choices, i didn't know what is prosper loan is, i studied it, studied nearly all the 81 variables well, i searched for Some explorations on some datasets regarding the prosper category, it was so hard to study relations between this number of variables, but at last it was kind of rewarding.
+
+I learnt too much, Some R functions, also i practiced Plyr and Dplyr packages,
+I studied the dataset alot to produce a firm Understanding to it, to begin analyzing its features.
+
+Future work on this dataset would be a multi level classifier to predict the Risk level based on some features like (APR, Amount Delinquent, CreditScore, etc..), Also to study the LP Features.
+
+
+## Resources used:
+
+1. https://www.prosper.com/plp/about/
+
+2. EDA Course on UDACITY
+
+3. https://github.com/MayukhSobo/Loan_EDA
+
+4. https://www.r-bloggers.com/
